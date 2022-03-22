@@ -1,9 +1,9 @@
-package com.gui.estore.ordersservice.queries;
+package com.gui.estore.ordersservice.core.events;
 
-import com.gui.estore.ordersservice.core.events.OrderCreatedEvent;
 import com.gui.estore.ordersservice.model.OrderEntity;
 import com.gui.estore.ordersservice.repositories.OrderRepository;
 import org.axonframework.config.ProcessingGroup;
+import org.axonframework.eventhandling.EventHandler;
 import org.axonframework.messaging.interceptors.ExceptionHandler;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +33,7 @@ public class OrderEventsHandler {
 //        throw IllegalArgumentException;
     }
 
+    @EventHandler
     public void on(OrderCreatedEvent orderCreatedEvent) {
 
         OrderEntity orderEntity = new OrderEntity();

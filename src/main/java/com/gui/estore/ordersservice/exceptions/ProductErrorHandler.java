@@ -18,12 +18,12 @@ public class ProductErrorHandler {
         return new ResponseEntity<>(errorMessage, new HttpHeaders(), HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
-//    @ExceptionHandler(value = {RuntimeException.class})
-//    public ResponseEntity<ErrorMessage> handleRuntimeException(RuntimeException e) {
-//
-//        ErrorMessage errorMessage = new ErrorMessage(e.getMessage());
-//        return new ResponseEntity<>(errorMessage, new HttpHeaders(), HttpStatus.BAD_REQUEST);
-//    }
+    @ExceptionHandler(value = {RuntimeException.class})
+    public ResponseEntity<ErrorMessage> handleRuntimeException(RuntimeException e) {
+
+        ErrorMessage errorMessage = new ErrorMessage(e.getMessage());
+        return new ResponseEntity<>(errorMessage, new HttpHeaders(), HttpStatus.BAD_REQUEST);
+    }
 
     // excepciones del AGGREGATE
     @ExceptionHandler(value = {CommandExecutionException.class})
@@ -40,8 +40,8 @@ public class ProductErrorHandler {
         return new ResponseEntity<>(errorMessage, new HttpHeaders(), HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
-    @ExceptionHandler(NoDataFoundException.class)
-    public ResponseEntity<ErrorMessage> noDataErrorHandler(NoDataFoundException e) {
+    @ExceptionHandler(value = {OrderNotFoundException.class})
+    public ResponseEntity<ErrorMessage> noDataErrorHandler(OrderNotFoundException e) {
 
         ErrorMessage errorMessage = new ErrorMessage(e.getMessage());
 
