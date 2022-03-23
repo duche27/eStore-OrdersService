@@ -1,19 +1,13 @@
 package com.gui.estore.ordersservice.commands.rest;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 import javax.validation.constraints.Max;
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotBlank;
 
 @Data
-@AllArgsConstructor
-@NoArgsConstructor
-@Builder
-public class CreateOrderRestModel {
+public class OrderCreateRest {
 
     @NotBlank(message = "ProductID cannot be empty")
     private String productId;

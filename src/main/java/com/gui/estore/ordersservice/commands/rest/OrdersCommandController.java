@@ -21,19 +21,19 @@ public class OrdersCommandController {
     }
 
     @PostMapping("newOrder")
-    public ResponseEntity<?> createOrder(@Valid @RequestBody CreateOrderRestModel createOrderRestModel) {
+    public ResponseEntity<?> createOrder(@Valid @RequestBody OrderCreateRest orderCreateRest) {
 
         CreateOrderCommand createOrderCommand = CreateOrderCommand.builder()
                 .orderId(UUID.randomUUID().toString())
                 .userId("27b95829-4f3f-4ddf-8983-151ba010e35b")
-                .productId(createOrderRestModel.getProductId())
-                .quantity(createOrderRestModel.getQuantity())
-                .addressId(createOrderRestModel.getAddressId())
+                .productId(orderCreateRest.getProductId())
+                .quantity(orderCreateRest.getQuantity())
+                .addressId(orderCreateRest.getAddressId())
                 .orderStatus(OrderStatus.CREATED)
                 .build();
 
         commandGateway.sendAndWait(createOrderCommand);
 
-        return new ResponseEntity<>("lalala ORDER POST con addressID " + createOrderRestModel.getAddressId() + " - id " + createOrderRestModel.getProductId(), HttpStatus.CREATED);
+        return new ResponseEntity<>("lalala ORDER POST con addressID " + orderCreateRest.getAddressId() + " - id " + orderCreateRest.getProductId(), HttpStatus.CREATED);
     }
 }

@@ -1,9 +1,7 @@
-package com.gui.estore.ordersservice.aggregates;
+package com.gui.estore.ordersservice.commands;
 
-import com.gui.estore.ordersservice.commands.CreateOrderCommand;
 import com.gui.estore.ordersservice.core.events.OrderCreatedEvent;
 import com.gui.estore.ordersservice.model.OrderStatus;
-import lombok.NoArgsConstructor;
 import org.axonframework.commandhandling.CommandHandler;
 import org.axonframework.eventsourcing.EventSourcingHandler;
 import org.axonframework.modelling.command.AggregateIdentifier;
@@ -11,11 +9,7 @@ import org.axonframework.modelling.command.AggregateLifecycle;
 import org.axonframework.spring.stereotype.Aggregate;
 import org.springframework.beans.BeanUtils;
 
-import javax.persistence.EnumType;
-import javax.persistence.Enumerated;
-
 @Aggregate
-@NoArgsConstructor
 public class OrderAggregate {
 
     @AggregateIdentifier
@@ -25,6 +19,8 @@ public class OrderAggregate {
     private int quantity;
     private String addressId;
     private OrderStatus orderStatus;
+
+    public OrderAggregate() {}
 
     @CommandHandler
     public OrderAggregate(CreateOrderCommand createOrderCommand) {
@@ -42,7 +38,7 @@ public class OrderAggregate {
     }
 
     @EventSourcingHandler
-    public void on(OrderCreatedEvent orderCreatedEvent) {
+    public void on(OrderCreatedEvent orderCreatedEvent) throws Exception {
         this.orderId = orderCreatedEvent.getOrderId();
         this.userId = orderCreatedEvent.getUserId();
         this.productId = orderCreatedEvent.getProductId();
