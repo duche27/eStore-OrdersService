@@ -10,7 +10,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
-@ProcessingGroup("order-group")   // agrupado con OrderLookupEventsHandler para compartir hilo de ejecución (por rollbacks)
+@ProcessingGroup("order-group")
+// agrupado con OrderLookupEventsHandler para compartir hilo de ejecución (por rollbacks)
 public class OrderEventsHandler {
 
     private final OrderRepository orderRepository;

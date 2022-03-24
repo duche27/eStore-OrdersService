@@ -1,10 +1,12 @@
 package com.gui.estore.ordersservice.saga;
 
+import com.gui.estore.core.commands.ProcessPaymentCommand;
 import com.gui.estore.core.commands.ReserveProductCommand;
 import com.gui.estore.core.events.ProductReservedEvent;
 import com.gui.estore.core.model.User;
 import com.gui.estore.core.queries.FetchUserPaymentDetailsQuery;
 import com.gui.estore.ordersservice.core.events.OrderCreatedEvent;
+import com.gui.estore.ordersservice.exceptions.PaymentException;
 import lombok.extern.slf4j.Slf4j;
 import org.axonframework.commandhandling.CommandCallback;
 import org.axonframework.commandhandling.CommandMessage;
@@ -19,6 +21,8 @@ import org.axonframework.spring.stereotype.Saga;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Saga
@@ -34,7 +38,7 @@ public class OrderSaga {
     // en cuanto un OrderCreatedEvent sea creado
     // associationProperty = "orderId" asocia los eventos a la instancia de SAGA
     @StartSaga
-    @SagaEventHandler(associationProperty="orderId")
+    @SagaEventHandler(associationProperty = "orderId")
     public void handle(OrderCreatedEvent orderCreatedEvent) {
 
         ReserveProductCommand reserveProductCommand = ReserveProductCommand.builder()
@@ -45,7 +49,7 @@ public class OrderSaga {
                 .build();
 
         log.info("OrderCreatedEvent handled in SAGA for orderId: " + reserveProductCommand.getOrderId() +
-                " and productId: " + reserveProductCommand.getProductId() );
+                " and productId: " + reserveProductCommand.getProductId());
 
         // CALLBACK nos informará cuando el COMMAND haya sido procesado
         // mandamos COMMAND al ProductAggregate
@@ -55,7 +59,7 @@ public class OrderSaga {
             @Override
             public void onResult(CommandMessage<? extends ReserveProductCommand> commandMessage,
                                  CommandResultMessage<? extends Object> commandResultMessage) {
-                if(commandResultMessage.isExceptional()) {
+                if (commandResultMessage.isExceptional()) {
                     // Start a compensating transaction si hay EXCEPTION
 //                    RejectOrderCommand rejectOrderCommand = new RejectOrderCommand(orderCreatedEvent.getOrderId(),
 //                            commandResultMessage.exceptionResult().getMessage());
@@ -89,11 +93,30 @@ public class OrderSaga {
 
         if (Objects.isNull(userPaymentDetails)) {
 
-            // Start a compensating transaction si hay EXCEPTION
-
+            throw new PaymentException("Ha habido un error al recuperar los métodos de pago del usuario" + userPaymentDetails.getFirstName());
         }
 
         log.info("Información del pago del usuario " + userPaymentDetails.getFirstName() + " recuperada OK");
 
+        ProcessPaymentCommand processPaymentCommand = ProcessPaymentCommand.builder()
+                .orderId(productReservedEvent.getOrderId())
+                .paymentId(UUID.randomUUID().toString())
+                .paymentDetails(userPaymentDetails.getPaymentDetails())
+                .build();
+
+        String result = null;
+
+        try {
+            // acepta time unit de espera de respuesta
+            // bloquea ejecución ese tiempo, si no llega devuelve null
+            result = commandGateway.sendAndWait(processPaymentCommand, 10, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            log.error(e.getMessage());
+        }
+
+        if (Objects.isNull(result)) {
+
+            throw new PaymentException("Ha habido un error al ejecutar el pago del usuario" + userPaymentDetails.getFirstName());
+        }
     }
 }

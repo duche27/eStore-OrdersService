@@ -20,7 +20,8 @@ public class OrderAggregate {
     private String addressId;
     private OrderStatus orderStatus;
 
-    public OrderAggregate() {}
+    public OrderAggregate() {
+    }
 
     @CommandHandler
     public OrderAggregate(CreateOrderCommand createOrderCommand) {

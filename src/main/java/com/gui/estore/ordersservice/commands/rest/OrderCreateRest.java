@@ -16,6 +16,6 @@ public class OrderCreateRest {
     @Max(value = 5, message = "Quantity cannot be higher than 5")
     private Integer quantity;
 
-//    @NotBlank(message = "AddressID cannot be empty")
+    //    @NotBlank(message = "AddressID cannot be empty")
     private String addressId;
 }
