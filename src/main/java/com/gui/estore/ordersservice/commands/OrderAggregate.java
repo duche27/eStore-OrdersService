@@ -1,5 +1,6 @@
 package com.gui.estore.ordersservice.commands;
 
+import com.gui.estore.ordersservice.core.events.OrderApprovedEvent;
 import com.gui.estore.ordersservice.core.events.OrderCreatedEvent;
 import com.gui.estore.ordersservice.model.OrderStatus;
 import org.axonframework.commandhandling.CommandHandler;
@@ -45,6 +46,21 @@ public class OrderAggregate {
         this.productId = orderCreatedEvent.getProductId();
         this.quantity = orderCreatedEvent.getQuantity();
         this.addressId = orderCreatedEvent.getAddressId();
-        this.orderStatus = orderCreatedEvent.getOrderStatus();
+        this.orderStatus = OrderStatus.ON_VALIDATION;
+    }
+
+    @CommandHandler
+    public void handle(ApproveOrderCommand approveOrderCommand) {
+
+        // creamos evento
+        OrderApprovedEvent orderApprovedEvent =  new OrderApprovedEvent(approveOrderCommand.getOrderId());
+
+        // publicamos
+        AggregateLifecycle.apply(orderApprovedEvent);
+    }
+
+    @EventSourcingHandler
+    public void on(OrderApprovedEvent orderApprovedEvent) throws Exception {
+        this.orderStatus = orderApprovedEvent.getOrderStatus();
     }
 }

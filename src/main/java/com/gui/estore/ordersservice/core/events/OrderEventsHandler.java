@@ -1,6 +1,7 @@
 package com.gui.estore.ordersservice.core.events;
 
 import com.gui.estore.ordersservice.model.OrderEntity;
+import com.gui.estore.ordersservice.model.OrderStatus;
 import com.gui.estore.ordersservice.repositories.OrderRepository;
 import org.axonframework.config.ProcessingGroup;
 import org.axonframework.eventhandling.EventHandler;
@@ -46,5 +47,16 @@ public class OrderEventsHandler {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    @EventHandler
+    public void on(OrderApprovedEvent orderApprovedEvent) {
+
+        OrderEntity orderEntity = orderRepository.findByOrderId(orderApprovedEvent.getOrderId())
+                .orElseThrow(() -> new RuntimeException("No hay orden que aprovar en BD"));
+
+        orderEntity.setOrderStatus(OrderStatus.APPROVED);
+
+        orderRepository.save(orderEntity);
     }
 }
