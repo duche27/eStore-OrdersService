@@ -2,6 +2,8 @@ package com.gui.estore.ordersservice.saga;
 
 import com.gui.estore.core.commands.ReserveProductCommand;
 import com.gui.estore.core.events.ProductReservedEvent;
+import com.gui.estore.core.model.User;
+import com.gui.estore.core.queries.FetchUserPaymentDetailsQuery;
 import com.gui.estore.ordersservice.core.events.OrderCreatedEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.axonframework.commandhandling.CommandCallback;
@@ -9,10 +11,14 @@ import org.axonframework.commandhandling.CommandMessage;
 import org.axonframework.commandhandling.CommandResultMessage;
 import org.axonframework.commandhandling.callbacks.LoggingCallback;
 import org.axonframework.commandhandling.gateway.CommandGateway;
+import org.axonframework.messaging.responsetypes.ResponseTypes;
 import org.axonframework.modelling.saga.SagaEventHandler;
 import org.axonframework.modelling.saga.StartSaga;
+import org.axonframework.queryhandling.QueryGateway;
 import org.axonframework.spring.stereotype.Saga;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.Objects;
 
 @Slf4j
 @Saga
@@ -21,6 +27,9 @@ public class OrderSaga {
     // saga es serialized, transient es para que no se serialicen los datos
     @Autowired
     private transient CommandGateway commandGateway;
+
+    @Autowired
+    private transient QueryGateway queryGateway;
 
     // en cuanto un OrderCreatedEvent sea creado
     // associationProperty = "orderId" asocia los eventos a la instancia de SAGA
@@ -47,7 +56,7 @@ public class OrderSaga {
             public void onResult(CommandMessage<? extends ReserveProductCommand> commandMessage,
                                  CommandResultMessage<? extends Object> commandResultMessage) {
                 if(commandResultMessage.isExceptional()) {
-                    // Start a compensating transaction  si hay EXCEPTION
+                    // Start a compensating transaction si hay EXCEPTION
 //                    RejectOrderCommand rejectOrderCommand = new RejectOrderCommand(orderCreatedEvent.getOrderId(),
 //                            commandResultMessage.exceptionResult().getMessage());
 //
@@ -63,5 +72,28 @@ public class OrderSaga {
         // process user payment
         log.info("ProductReservedEvent handled in SAGA! OrderId: " + productReservedEvent.getOrderId() + " - productId: "
                 + productReservedEvent.getProductId());
+
+        FetchUserPaymentDetailsQuery fetchUserPaymentDetailsQuery =
+                FetchUserPaymentDetailsQuery.builder()
+                        .userId(productReservedEvent.getUserId())
+                        .build();
+
+        User userPaymentDetails = null;
+
+        try {
+            // a GATEWAY u llega a UserEventsHandler
+            userPaymentDetails = queryGateway.query(fetchUserPaymentDetailsQuery, ResponseTypes.instanceOf(User.class)).join();
+        } catch (Exception e) {
+            log.error(e.getMessage());
+        }
+
+        if (Objects.isNull(userPaymentDetails)) {
+
+            // Start a compensating transaction si hay EXCEPTION
+
+        }
+
+        log.info("Información del pago del usuario " + userPaymentDetails.getFirstName() + " recuperada OK");
+
     }
 }
