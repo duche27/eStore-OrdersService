@@ -34,6 +34,9 @@ public class OrdersCommandController {
 
         commandGateway.sendAndWait(createOrderCommand);
 
-        return new ResponseEntity<>("lalala ORDER POST con addressID " + orderCreateRest.getAddressId() + " - id " + orderCreateRest.getProductId(), HttpStatus.CREATED);
+        return new ResponseEntity<>("lalala ORDER POST con addressID "
+                + orderCreateRest.getAddressId() + " - productId "
+                + orderCreateRest.getProductId() + "\n orderID: "
+                + createOrderCommand.orderId, HttpStatus.CREATED);
     }
 }

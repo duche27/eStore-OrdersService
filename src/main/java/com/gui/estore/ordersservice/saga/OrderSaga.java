@@ -35,28 +35,26 @@ public class OrderSaga {
                 .userId(orderCreatedEvent.getUserId())
                 .build();
 
-        log.info("OrderCreatedEvent handled in SAGA! OrderId: " + reserveProductCommand.getOrderId() + " - productId: "
-                + reserveProductCommand.getProductId());
+        log.info("OrderCreatedEvent handled in SAGA for orderId: " + reserveProductCommand.getOrderId() +
+                " and productId: " + reserveProductCommand.getProductId() );
 
         // CALLBACK nos informará cuando el COMMAND haya sido procesado
         // mandamos COMMAND al ProductAggregate
-        commandGateway.send(reserveProductCommand, LoggingCallback.INSTANCE);
-//        commandGateway.send(reserveProductCommand, new CommandCallback<ReserveProductCommand, Object>() {
+//        commandGateway.send(reserveProductCommand, LoggingCallback.INSTANCE);
+        commandGateway.send(reserveProductCommand, new CommandCallback<ReserveProductCommand, Object>() {
+
+            @Override
+            public void onResult(CommandMessage<? extends ReserveProductCommand> commandMessage,
+                                 CommandResultMessage<? extends Object> commandResultMessage) {
+                if(commandResultMessage.isExceptional()) {
+                    // Start a compensating transaction  si hay EXCEPTION
+//                    RejectOrderCommand rejectOrderCommand = new RejectOrderCommand(orderCreatedEvent.getOrderId(),
+//                            commandResultMessage.exceptionResult().getMessage());
 //
-//            @Override
-//            public void onResult(CommandMessage<? extends ReserveProductCommand> commandMessage,
-//                                 CommandResultMessage<? extends Object> commandResultMessage) {
-//                if(commandResultMessage.isExceptional()) {
-//                    // compensating transaction si hay EXCEPTION
-////                    RejectOrderCommand rejectOrderCommand = new RejectOrderCommand(orderCreatedEvent.getOrderId(),
-////                            commandResultMessage.exceptionResult().getMessage());
-////
-////                    commandGateway.send(rejectOrderCommand);
-//                }
-//
-//            }
-//
-//        });
+//                    commandGateway.send(rejectOrderCommand);
+                }
+            }
+        });
     }
 
     @SagaEventHandler(associationProperty = "orderId")
