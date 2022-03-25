@@ -59,4 +59,19 @@ public class OrderEventsHandler {
 
         orderRepository.save(orderEntity);
     }
+
+    @EventHandler
+    public void on(OrderRejectedEvent orderRejectedEvent) {
+
+        OrderEntity orderEntity = orderRepository.findByOrderId(orderRejectedEvent.getOrderId())
+                .orElseThrow(() -> new RuntimeException("No hay orden que aprovar en BD"));
+
+        orderEntity.setOrderStatus(orderRejectedEvent.getOrderStatus());
+
+        try {
+            orderRepository.save(orderEntity);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 }

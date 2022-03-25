@@ -1,14 +1,18 @@
 package com.gui.estore.ordersservice.saga;
 
+import com.gui.estore.core.commands.CancelProductReservationCommand;
 import com.gui.estore.core.commands.ProcessPaymentCommand;
 import com.gui.estore.core.commands.ReserveProductCommand;
 import com.gui.estore.core.events.PaymentProcessedEvent;
+import com.gui.estore.core.events.ProductReservationCancelledEvent;
 import com.gui.estore.core.events.ProductReservedEvent;
 import com.gui.estore.core.model.User;
 import com.gui.estore.core.queries.FetchUserPaymentDetailsQuery;
 import com.gui.estore.ordersservice.commands.ApproveOrderCommand;
+import com.gui.estore.ordersservice.commands.RejectOrderCommand;
 import com.gui.estore.ordersservice.core.events.OrderApprovedEvent;
 import com.gui.estore.ordersservice.core.events.OrderCreatedEvent;
+import com.gui.estore.ordersservice.core.events.OrderRejectedEvent;
 import com.gui.estore.ordersservice.exceptions.PaymentException;
 import lombok.extern.slf4j.Slf4j;
 import org.axonframework.commandhandling.CommandCallback;
@@ -93,11 +97,15 @@ public class OrderSaga {
             // QUERY a GATEWAY y llega a UserEventsHandler
             userPaymentDetails = queryGateway.query(fetchUserPaymentDetailsQuery, ResponseTypes.instanceOf(User.class)).join();
         } catch (Exception e) {
-            log.error(e.getMessage());
+            // compensation
+            cancelProductReservation(productReservedEvent,e.getMessage());
+            return;
         }
 
         if (Objects.isNull(userPaymentDetails)) {
-            throw new PaymentException("Ha habido un error al recuperar los métodos de pago del usuario" + userPaymentDetails.getFirstName());
+            cancelProductReservation(productReservedEvent,"Ha habido un error al recuperar los métodos de pago del usuario" + userPaymentDetails.getFirstName());
+            log.error("Ha habido un error al recuperar los métodos de pago del usuario" + userPaymentDetails.getFirstName());
+            return;
         }
 
         // userPaymentDetails OK -> mandamos a PaymentService AGGREGATE
@@ -116,11 +124,15 @@ public class OrderSaga {
             // bloquea ejecución ese tiempo, si no llega devuelve null
             result = commandGateway.sendAndWait(processPaymentCommand, 10, TimeUnit.SECONDS);
         } catch (Exception e) {
-            log.error(e.getMessage());
+            cancelProductReservation(productReservedEvent,e.getMessage());
+            log.error(e.getMessage() + "Ha habido un error al ejecutar el pago del usuario" + userPaymentDetails.getFirstName());
+            return;
         }
 
         if (Objects.isNull(result)) {
-            throw new PaymentException("Ha habido un error al ejecutar el pago del usuario" + userPaymentDetails.getFirstName());
+            cancelProductReservation(productReservedEvent,"Ha habido un error al ejecutar el pago del usuario" + userPaymentDetails.getFirstName());
+            log.error("Ha habido un error al ejecutar el pago del usuario" + userPaymentDetails.getFirstName());
+            return;
         }
     }
 
@@ -144,5 +156,45 @@ public class OrderSaga {
 
 //        SagaLifecycle.end();
 
+    }
+
+    @SagaEventHandler(associationProperty = "orderId")
+    public void handle(ProductReservationCancelledEvent productReservationCancelledEvent) {
+
+        log.info("PRODUCT RESERVATION EVENT handled in SAGA: OrderId " + productReservationCancelledEvent.getOrderId()
+        + " - productId " + productReservationCancelledEvent.getProductId() + " - REASON: " + productReservationCancelledEvent.getReason());
+
+        RejectOrderCommand rejectOrderCommand = RejectOrderCommand.builder()
+                .orderId(productReservationCancelledEvent.getOrderId())
+                .reason(productReservationCancelledEvent.getReason())
+                .build();
+
+        commandGateway.send(rejectOrderCommand);
+    }
+
+    @EndSaga
+    @SagaEventHandler(associationProperty = "orderId")
+    public void handle(OrderRejectedEvent orderRejectedEvent) {
+
+        log.info("ORDER REJECTED EVENT handled in SAGA: OrderId " + orderRejectedEvent.getOrderId()
+                + " - REASON: " + orderRejectedEvent.getReason());
+
+
+
+    }
+
+
+    // método para hacer ROLLBACK/COMPENSATION en varios puntos de SAGA
+    private void cancelProductReservation(ProductReservedEvent productReservedEvent, String reason) {
+
+        CancelProductReservationCommand cancelProductReservationCommand = CancelProductReservationCommand.builder()
+                .orderId(productReservedEvent.getOrderId())
+                .productId(productReservedEvent.getProductId())
+                .quantity(productReservedEvent.getQuantity())
+                .userId(productReservedEvent.getUserId())
+                .reason(reason)
+                .build();
+
+        commandGateway.send(cancelProductReservationCommand);
     }
 }

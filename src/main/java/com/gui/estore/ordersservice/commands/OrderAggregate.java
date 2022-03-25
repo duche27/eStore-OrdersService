@@ -2,6 +2,7 @@ package com.gui.estore.ordersservice.commands;
 
 import com.gui.estore.ordersservice.core.events.OrderApprovedEvent;
 import com.gui.estore.ordersservice.core.events.OrderCreatedEvent;
+import com.gui.estore.ordersservice.core.events.OrderRejectedEvent;
 import com.gui.estore.ordersservice.model.OrderStatus;
 import org.axonframework.commandhandling.CommandHandler;
 import org.axonframework.eventsourcing.EventSourcingHandler;
@@ -62,5 +63,19 @@ public class OrderAggregate {
     @EventSourcingHandler
     public void on(OrderApprovedEvent orderApprovedEvent) throws Exception {
         this.orderStatus = orderApprovedEvent.getOrderStatus();
+    }
+
+    @CommandHandler
+    public void handle(RejectOrderCommand rejectOrderCommand) {
+
+        OrderRejectedEvent orderRejectedEvent = new OrderRejectedEvent(
+                rejectOrderCommand.orderId, rejectOrderCommand.getReason());
+
+        AggregateLifecycle.apply(orderRejectedEvent);
+    }
+
+    @EventSourcingHandler
+    public void on(OrderRejectedEvent orderRejectedEvent) {
+        this.orderStatus = orderRejectedEvent.getOrderStatus();
     }
 }
