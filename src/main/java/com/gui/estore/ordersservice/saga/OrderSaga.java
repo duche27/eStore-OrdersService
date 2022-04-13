@@ -13,22 +13,23 @@ import com.gui.estore.ordersservice.commands.RejectOrderCommand;
 import com.gui.estore.ordersservice.core.events.OrderApprovedEvent;
 import com.gui.estore.ordersservice.core.events.OrderCreatedEvent;
 import com.gui.estore.ordersservice.core.events.OrderRejectedEvent;
-import com.gui.estore.ordersservice.exceptions.PaymentException;
 import lombok.extern.slf4j.Slf4j;
 import org.axonframework.commandhandling.CommandCallback;
 import org.axonframework.commandhandling.CommandMessage;
 import org.axonframework.commandhandling.CommandResultMessage;
-import org.axonframework.commandhandling.callbacks.LoggingCallback;
 import org.axonframework.commandhandling.gateway.CommandGateway;
+import org.axonframework.deadline.DeadlineManager;
+import org.axonframework.deadline.annotation.DeadlineHandler;
 import org.axonframework.messaging.responsetypes.ResponseTypes;
 import org.axonframework.modelling.saga.EndSaga;
 import org.axonframework.modelling.saga.SagaEventHandler;
-import org.axonframework.modelling.saga.SagaLifecycle;
 import org.axonframework.modelling.saga.StartSaga;
 import org.axonframework.queryhandling.QueryGateway;
 import org.axonframework.spring.stereotype.Saga;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -43,6 +44,13 @@ public class OrderSaga {
 
     @Autowired
     private transient QueryGateway queryGateway;
+
+    @Autowired
+    private transient DeadlineManager deadlineManager;
+
+    private final String PAYMENT_PROCESSING_TIMEOUT_DEADLINE = "payment-processing-deadline";
+
+    private String scheduleId;
 
     // abrimos método HANDLE pro cada EVENT recibido
     // en cuanto un OrderCreatedEvent sea creado
@@ -111,6 +119,14 @@ public class OrderSaga {
         // userPaymentDetails OK -> mandamos a PaymentService AGGREGATE
         log.info("Información del pago del usuario " + userPaymentDetails.getFirstName() + " recuperada OK");
 
+        // 2 mins, pero normalmente algo como una confirmación de usuario pueden ser varios días
+        // productReservedEvent payload opcional
+        scheduleId = deadlineManager.schedule(Duration.of(2, ChronoUnit.MINUTES),
+                PAYMENT_PROCESSING_TIMEOUT_DEADLINE, productReservedEvent);
+
+        // para pruebas: ejecutaba siempre deadlineManager
+//        if (true) return;
+
         ProcessPaymentCommand processPaymentCommand = ProcessPaymentCommand.builder()
                 .orderId(productReservedEvent.getOrderId())
                 .paymentId(UUID.randomUUID().toString())
@@ -139,6 +155,9 @@ public class OrderSaga {
     @SagaEventHandler(associationProperty = "orderId")
     public void handle(PaymentProcessedEvent paymentProcessedEvent) {
 
+        // si se ha procesado el pago cancelamos el Deadline
+        cancelDeadline();
+
         // processed user payment
         log.info("PaymentProcessedEvent handled in SAGA! OrderId: " + paymentProcessedEvent.getOrderId());
 
@@ -154,6 +173,7 @@ public class OrderSaga {
 
         log.info("OrderApprovedEvent completely handled in SAGA! OrderId: " + orderApprovedEvent.getOrderId());
 
+        // método alternativo para indicar el fin de saga aparte de la anotación @EndSaga
 //        SagaLifecycle.end();
 
     }
@@ -178,14 +198,24 @@ public class OrderSaga {
 
         log.info("ORDER REJECTED EVENT handled in SAGA: OrderId " + orderRejectedEvent.getOrderId()
                 + " - REASON: " + orderRejectedEvent.getReason());
-
-
-
     }
 
+    // método con el mismo deadlineName que el nuestro para que AXON lo ejecute en el caso de que haga falta
+    // el argumento productReservedEvent es el payload opcional que habíamos mandado en la creación del Deadline
+    @DeadlineHandler(deadlineName = PAYMENT_PROCESSING_TIMEOUT_DEADLINE)
+    public void handlePaymentDeadline(ProductReservedEvent productReservedEvent) {
+
+        log.info("Payment processing deadline took place. Sending a compensation command to cancel de product reservation.");
+
+        // nuestro método general de rollback en la SAGA y el payload opcional que habíamos mandado
+        cancelProductReservation(productReservedEvent, "Payment processing timeout");
+    }
 
     // método para hacer ROLLBACK/COMPENSATION en varios puntos de SAGA
     private void cancelProductReservation(ProductReservedEvent productReservedEvent, String reason) {
+
+        // si se cancela la reserva cancelamos el Deadline
+        cancelDeadline();
 
         CancelProductReservationCommand cancelProductReservationCommand = CancelProductReservationCommand.builder()
                 .orderId(productReservedEvent.getOrderId())
@@ -196,5 +226,15 @@ public class OrderSaga {
                 .build();
 
         commandGateway.send(cancelProductReservationCommand);
+    }
+
+    // método para cancelar el Deadline usándolo en varios puntos de SAGA
+    private void cancelDeadline() {
+
+        // si se ha procesado el pago, se cancela el DeadLineManager porque el proceso ha ido ok
+        if (scheduleId != null) {
+            deadlineManager.cancelSchedule(PAYMENT_PROCESSING_TIMEOUT_DEADLINE, scheduleId);
+            scheduleId = null;
+        }
     }
 }
