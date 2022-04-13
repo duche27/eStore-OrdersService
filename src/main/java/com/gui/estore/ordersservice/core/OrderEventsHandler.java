@@ -1,5 +1,8 @@
-package com.gui.estore.ordersservice.core.events;
+package com.gui.estore.ordersservice.core;
 
+import com.gui.estore.ordersservice.core.events.OrderApprovedEvent;
+import com.gui.estore.ordersservice.core.events.OrderCreatedEvent;
+import com.gui.estore.ordersservice.core.events.OrderRejectedEvent;
 import com.gui.estore.ordersservice.model.OrderEntity;
 import com.gui.estore.ordersservice.model.OrderStatus;
 import com.gui.estore.ordersservice.repositories.OrderRepository;

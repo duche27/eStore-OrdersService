@@ -13,6 +13,8 @@ import com.gui.estore.ordersservice.commands.RejectOrderCommand;
 import com.gui.estore.ordersservice.core.events.OrderApprovedEvent;
 import com.gui.estore.ordersservice.core.events.OrderCreatedEvent;
 import com.gui.estore.ordersservice.core.events.OrderRejectedEvent;
+import com.gui.estore.ordersservice.model.OrderSummary;
+import com.gui.estore.ordersservice.queries.FindOrderQuery;
 import lombok.extern.slf4j.Slf4j;
 import org.axonframework.commandhandling.CommandCallback;
 import org.axonframework.commandhandling.CommandMessage;
@@ -25,6 +27,7 @@ import org.axonframework.modelling.saga.EndSaga;
 import org.axonframework.modelling.saga.SagaEventHandler;
 import org.axonframework.modelling.saga.StartSaga;
 import org.axonframework.queryhandling.QueryGateway;
+import org.axonframework.queryhandling.QueryUpdateEmitter;
 import org.axonframework.spring.stereotype.Saga;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -47,6 +50,9 @@ public class OrderSaga {
 
     @Autowired
     private transient DeadlineManager deadlineManager;
+
+    @Autowired
+    private transient QueryUpdateEmitter queryUpdateEmitter;
 
     private final String PAYMENT_PROCESSING_TIMEOUT_DEADLINE = "payment-processing-deadline";
 
@@ -78,10 +84,11 @@ public class OrderSaga {
                                  CommandResultMessage<? extends Object> commandResultMessage) {
                 if (commandResultMessage.isExceptional()) {
                     // Start a compensating transaction si hay EXCEPTION
-//                    RejectOrderCommand rejectOrderCommand = new RejectOrderCommand(orderCreatedEvent.getOrderId(),
-//                            commandResultMessage.exceptionResult().getMessage());
-//
-//                    commandGateway.send(rejectOrderCommand);
+                    RejectOrderCommand rejectOrderCommand = RejectOrderCommand.builder()
+                            .orderId(orderCreatedEvent.getOrderId())
+                            .reason(commandResultMessage.exceptionResult().getMessage()).build();
+
+                    commandGateway.send(rejectOrderCommand);
                 }
             }
         });
@@ -173,6 +180,14 @@ public class OrderSaga {
 
         log.info("OrderApprovedEvent completely handled in SAGA! OrderId: " + orderApprovedEvent.getOrderId());
 
+        // happy path cuando tenemos OrderApprovedEvent
+        // comunica con SUBSCRIPTION QUERY posibles cambios, errores o ya no hay updates
+        // parámetros: query class, predicado sin filtrar, updated object (OrderSummary que devuelve OrdersCommandController)
+        queryUpdateEmitter.emit(
+                FindOrderQuery.class,
+                query -> true,
+                new OrderSummary(orderApprovedEvent.getOrderId(), orderApprovedEvent.getOrderStatus(), ""));
+
         // método alternativo para indicar el fin de saga aparte de la anotación @EndSaga
 //        SagaLifecycle.end();
 
@@ -198,6 +213,12 @@ public class OrderSaga {
 
         log.info("ORDER REJECTED EVENT handled in SAGA: OrderId " + orderRejectedEvent.getOrderId()
                 + " - REASON: " + orderRejectedEvent.getReason());
+
+        // cuando tenemos OrderRejectedEvent también actualizamos la suscripción
+        queryUpdateEmitter.emit(
+                FindOrderQuery.class,
+                query -> true,
+                new OrderSummary(orderRejectedEvent.getOrderId(), orderRejectedEvent.getOrderStatus(), orderRejectedEvent.getReason()));
     }
 
     // método con el mismo deadlineName que el nuestro para que AXON lo ejecute en el caso de que haga falta

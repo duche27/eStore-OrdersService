@@ -16,10 +16,10 @@ import javax.persistence.Enumerated;
 public class FindOrderQuery {
 
     public String orderId;
-    private String userId;
-    private String productId;
-    private int quantity;
-    private String addressId;
-    @Enumerated(EnumType.STRING)
-    private OrderStatus orderStatus;
+//    private String userId;
+//    private String productId;
+//    private int quantity;
+//    private String addressId;
+//    @Enumerated(EnumType.STRING)
+//    private OrderStatus orderStatus;
 }
