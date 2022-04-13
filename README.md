@@ -17,3 +17,6 @@ commandController recibe DTO y crea COMMAND con @TargetAggregateIdentifier en ca
       1) Con UI: cuando recibimos confirmación de COMMAND OK, se puede subscribir a una QUERY para recibir los cambios que se produzcan en la BD
       2) Sin UI: inyectamos QueryGateway en el controller, que recibe el COMMAND OK, y lanza la SUBSCRIPTION QUERY y actualiza la info al cliente
     - después cancelamos la suscripción
+  - Snapshotting: nos ayudan a acelerar la carga de eventos en el event store (event DB) creando un snapshot cada x eventos
+    - el estado final de un AGRREGATE se configura con la acumulación de todos los eventos previos a la consulta
+    - con los snapshots, el resto no se cargan, por lo que lee muchos menos eventos
