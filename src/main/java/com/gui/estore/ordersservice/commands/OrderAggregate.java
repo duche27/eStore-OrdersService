@@ -31,7 +31,7 @@ public class OrderAggregate {
         // validaciones
 
 
-        // creamos evento
+        // creamos evento si pasan validaciones
         OrderCreatedEvent orderCreatedEvent = new OrderCreatedEvent();
 
         BeanUtils.copyProperties(createOrderCommand, orderCreatedEvent);
@@ -56,7 +56,7 @@ public class OrderAggregate {
         // creamos evento
         OrderApprovedEvent orderApprovedEvent =  new OrderApprovedEvent(approveOrderCommand.getOrderId());
 
-        // publicamos
+        // publicamos evento
         AggregateLifecycle.apply(orderApprovedEvent);
     }
 

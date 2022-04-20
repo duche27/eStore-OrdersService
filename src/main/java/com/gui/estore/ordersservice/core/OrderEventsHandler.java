@@ -25,19 +25,6 @@ public class OrderEventsHandler {
         this.orderRepository = orderRepository;
     }
 
-    // lanza la excepción controlada si no persiste productEntity
-    // sin persistir nada, es transaccional
-    // de aquí va a OrderServiceEventHandler - después a OrderErrorHandler - excepción controlada
-    @ExceptionHandler(resultType = Exception.class)
-    private void handle(Exception exception) throws Exception {
-        throw exception;
-    }
-
-    @ExceptionHandler(resultType = IllegalArgumentException.class)
-    private void handle(IllegalArgumentException exception) throws IllegalArgumentException {
-//        throw IllegalArgumentException;
-    }
-
     @EventHandler
     public void on(OrderCreatedEvent orderCreatedEvent) {
 
@@ -67,7 +54,7 @@ public class OrderEventsHandler {
     public void on(OrderRejectedEvent orderRejectedEvent) {
 
         OrderEntity orderEntity = orderRepository.findByOrderId(orderRejectedEvent.getOrderId())
-                .orElseThrow(() -> new RuntimeException("No hay orden que aprovar en BD"));
+                .orElseThrow(() -> new RuntimeException("No hay orden que rechazar en BD"));
 
         orderEntity.setOrderStatus(orderRejectedEvent.getOrderStatus());
 
@@ -76,5 +63,19 @@ public class OrderEventsHandler {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+
+    // lanza la excepción controlada si no persiste productEntity
+    // sin persistir nada, es transaccional
+    // de aquí va a OrderServiceEventHandler - después a OrderErrorHandler - excepción controlada
+    @ExceptionHandler(resultType = Exception.class)
+    private void handle(Exception exception) throws Exception {
+        throw exception;
+    }
+
+    @ExceptionHandler(resultType = IllegalArgumentException.class)
+    private void handle(IllegalArgumentException exception) throws IllegalArgumentException {
+//        throw IllegalArgumentException;
     }
 }
