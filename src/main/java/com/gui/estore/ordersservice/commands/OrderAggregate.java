@@ -54,7 +54,10 @@ public class OrderAggregate {
     public void handle(ApproveOrderCommand approveOrderCommand) {
 
         // creamos evento
-        OrderApprovedEvent orderApprovedEvent =  new OrderApprovedEvent(approveOrderCommand.getOrderId());
+        OrderApprovedEvent orderApprovedEvent =  OrderApprovedEvent.builder()
+                .orderId(approveOrderCommand.getOrderId())
+                .orderStatus(OrderStatus.APPROVED)
+                .build();
 
         // publicamos evento
         AggregateLifecycle.apply(orderApprovedEvent);
@@ -68,8 +71,11 @@ public class OrderAggregate {
     @CommandHandler
     public void handle(RejectOrderCommand rejectOrderCommand) {
 
-        OrderRejectedEvent orderRejectedEvent = new OrderRejectedEvent(
-                rejectOrderCommand.orderId, rejectOrderCommand.getReason());
+        OrderRejectedEvent orderRejectedEvent = OrderRejectedEvent.builder()
+                .orderId(rejectOrderCommand.getOrderId())
+                .orderStatus(OrderStatus.REJECTED)
+                .reason(rejectOrderCommand.getReason())
+                .build();
 
         AggregateLifecycle.apply(orderRejectedEvent);
     }

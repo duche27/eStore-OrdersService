@@ -43,9 +43,10 @@ public class OrdersCommandController {
                 .build();
 
         // parámetros: query a lanzar, tipo de respuesta inicial, tipo de respuesta final con el incremental update
-        SubscriptionQueryResult<OrderSummary, OrderSummary> subscriptionQueryResult = queryGateway.subscriptionQuery(new FindOrderQuery(orderId),
-                ResponseTypes.instanceOf(OrderSummary.class),
-                ResponseTypes.instanceOf(OrderSummary.class));
+        SubscriptionQueryResult<OrderSummary, OrderSummary> subscriptionQueryResult =
+                queryGateway.subscriptionQuery(new FindOrderQuery(orderId),
+                        ResponseTypes.instanceOf(OrderSummary.class),
+                        ResponseTypes.instanceOf(OrderSummary.class));
 
         try {
             commandGateway.sendAndWait(createOrderCommand);

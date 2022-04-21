@@ -45,7 +45,7 @@ public class OrderEventsHandler {
         OrderEntity orderEntity = orderRepository.findByOrderId(orderApprovedEvent.getOrderId())
                 .orElseThrow(() -> new RuntimeException("No hay orden que aprovar en BD"));
 
-        orderEntity.setOrderStatus(OrderStatus.APPROVED);
+        orderEntity.setOrderStatus(orderApprovedEvent.getOrderStatus());
 
         orderRepository.save(orderEntity);
     }
@@ -69,13 +69,13 @@ public class OrderEventsHandler {
     // lanza la excepción controlada si no persiste productEntity
     // sin persistir nada, es transaccional
     // de aquí va a OrderServiceEventHandler - después a OrderErrorHandler - excepción controlada
-    @ExceptionHandler(resultType = Exception.class)
+    @ExceptionHandler()
     private void handle(Exception exception) throws Exception {
         throw exception;
     }
 
     @ExceptionHandler(resultType = IllegalArgumentException.class)
     private void handle(IllegalArgumentException exception) throws IllegalArgumentException {
-//        throw IllegalArgumentException;
+        throw exception;
     }
 }

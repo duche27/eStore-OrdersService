@@ -57,6 +57,10 @@ public class OrderSaga {
     private String shipmentScheduleId;
     private String userEmail;
 
+    private String productId;
+    private int productQuantity;
+    private String userId;
+
     // abrimos método HANDLE pro cada EVENT recibido
     // en cuanto un OrderCreatedEvent sea creado
     // associationProperty = "orderId" asocia los eventos a la instancia de SAGA
@@ -71,11 +75,12 @@ public class OrderSaga {
                 .userId(orderCreatedEvent.getUserId())
                 .build();
 
-        log.info("OrderCreatedEvent handled in SAGA for orderId: " + reserveProductCommand.getOrderId() +
+        log.info("Orden creada OK en SAGA. Order: " + reserveProductCommand.getOrderId() +
                 " and productId: " + reserveProductCommand.getProductId());
 
         // CALLBACK nos informará cuando el COMMAND haya sido procesado
         // mandamos COMMAND al ProductAggregate
+        // se puede hacer así o como el resto de compensations con try catch
         commandGateway.send(reserveProductCommand, new CommandCallback<ReserveProductCommand, Object>() {
 
             @Override
@@ -96,8 +101,12 @@ public class OrderSaga {
     @SagaEventHandler(associationProperty = "orderId")
     public void handle(ProductReservedEvent productReservedEvent) {
 
+        productId = productReservedEvent.getProductId();
+        productQuantity = productReservedEvent.getQuantity();
+        userId = productReservedEvent.getUserId();
+
         // process user payment
-        log.info("ProductReservedEvent handled in SAGA! OrderId: " + productReservedEvent.getOrderId() + " - productId: "
+        log.info("ProductReservedEvent gestionado OK en SAGA. Orden: " + productReservedEvent.getOrderId() + " - Producto: "
                 + productReservedEvent.getProductId());
 
         FetchUserPaymentDetailsQuery fetchUserPaymentDetailsQuery =
@@ -163,10 +172,9 @@ public class OrderSaga {
     @SagaEventHandler(associationProperty = "orderId")
     public void handle(PaymentProcessedEvent paymentProcessedEvent) {
 
-        log.info("Pago de orden " + paymentProcessedEvent.getOrderId() + " ejecutado OK");
+        log.info("Pago ejecutado OK. Orden: " + paymentProcessedEvent.getOrderId());
 
         // 2 mins, pero normalmente algo como un envío pueden ser varios días
-        // paymentProcessedEvent payload opcional
         shipmentScheduleId = deadlineManager.schedule(Duration.of(2, ChronoUnit.MINUTES),
                 SHIPMENT_PROCESSING_TIMEOUT_DEADLINE, paymentProcessedEvent);
 
@@ -175,15 +183,24 @@ public class OrderSaga {
                 .shipmentId(UUID.randomUUID().toString())
                 .build();
 
-        try {
+        String result = null;
 
+        try {
             // enviamos el COMMAND al COMMAND GATEWAY que llegará al AGGREGATE de SHIPMENT
-            commandGateway.send(shipOrderCommand);
+            result = commandGateway.sendAndWait(shipOrderCommand, 10, TimeUnit.SECONDS);
+
         } catch (Exception e) {
             // compensation transaction
-            log.error("Ha habido un error al enviar con el ENVÍO de la orden");
-//            ProductReservedEvent productReservedEvent = ProductReservedEvent.builder().orderId(productReservedEvent.getOrderId()).build();
-//            cancelProductReservation(productReservedEvent, e.getMessage());
+            log.error("Ha habido un error con el ENVÍO de la orden {}", paymentProcessedEvent.getOrderId());
+
+            CancelPaymentCommand cancelPaymentCommand = CancelPaymentCommand.builder()
+                    .paymentId(paymentProcessedEvent.getPaymentId())
+                    .orderId(paymentProcessedEvent.getOrderId())
+                    .reason(e.getMessage()).build();
+
+            commandGateway.send(cancelPaymentCommand);
+
+            return;
         }
     }
 
@@ -191,7 +208,7 @@ public class OrderSaga {
     public void handle(OrderShippedEvent orderShippedEvent) {
 
         // processed user shipment
-        log.info("Envío completado correctamente! Orden " + orderShippedEvent.getOrderId());
+        log.info("Envío completado OK. Orden " + orderShippedEvent.getOrderId());
 
         SendNotificationCommand sendNotificationCommand = SendNotificationCommand.builder()
                 .orderId(orderShippedEvent.getOrderId())
@@ -199,26 +216,34 @@ public class OrderSaga {
                 .email(userEmail)
                 .build();
 
+        String result = null;
+
         try {
 
             // enviamos el COMMAND al COMMAND GATEWAY que llegará al AGGREGATE de NOTIFICATION
-            commandGateway.send(sendNotificationCommand);
+            result = commandGateway.sendAndWait(sendNotificationCommand, 10, TimeUnit.SECONDS);
+
         } catch (Exception e) {
-            // compensation transaction
+            // no es necesaria compensación
             log.error("Ha habido un error al enviar la notificación vía email");
-//            ProductReservedEvent productReservedEvent = ProductReservedEvent.builder().orderId(productReservedEvent.getOrderId()).build();
-//            cancelProductReservation(productReservedEvent, e.getMessage());
+            // OK procesado reserva, pago y envío -> cancelamos el Deadline
+            cancelDeadline();
+            log.info("Orden {} cerrada correctamente",sendNotificationCommand.getOrderId());
+            // creamos nuevo orderAcceptCommand
+            ApproveOrderCommand approveOrderCommand = new ApproveOrderCommand(sendNotificationCommand.getOrderId());
+
+            commandGateway.send(approveOrderCommand);
         }
     }
 
     @SagaEventHandler(associationProperty = "orderId")
     public void handle(NotificationSentEvent notificationSentEvent) {
 
-        // si se ha procesado el pago y el envío ha sido correcto cancelamos el Deadline
+        // OK procesado reserva, pago, envío y notificación -> cancelamos el Deadline
         cancelDeadline();
 
         // processed user notification
-        log.info("El cliente ha sido notificado correctamente! Orden " + notificationSentEvent.getOrderId());
+        log.info("El cliente con email " + notificationSentEvent.getEmail() + " ha sido notificado correctamente. Orden " + notificationSentEvent.getOrderId());
 
         // mandamos al servicio de notificaciones
 
@@ -232,7 +257,7 @@ public class OrderSaga {
     @SagaEventHandler(associationProperty = "orderId")
     public void handle(OrderApprovedEvent orderApprovedEvent) {
 
-        log.info("OrderApprovedEvent completely handled in SAGA! OrderId: " + orderApprovedEvent.getOrderId());
+        log.info("Orden completada OK en SAGA. Orden: " + orderApprovedEvent.getOrderId());
 
         // happy path cuando tenemos OrderApprovedEvent
         // comunica con SUBSCRIPTION QUERY posibles cambios, errores o ya no hay updates
@@ -241,17 +266,15 @@ public class OrderSaga {
                 FindOrderQuery.class,
                 query -> true,
                 new OrderSummary(orderApprovedEvent.getOrderId(), orderApprovedEvent.getOrderStatus(), "ORDER APPROVED"));
-
-        // método alternativo para indicar el fin de saga aparte de la anotación @EndSaga
-//        SagaLifecycle.end();
-
     }
 
+    // ---------  COMPENSATIONS  ---------
+
+    // compensation en order por cancelación en product reservation
     @SagaEventHandler(associationProperty = "orderId")
     public void handle(ProductReservationCancelledEvent productReservationCancelledEvent) {
 
-        log.info("PRODUCT RESERVATION EVENT handled in SAGA: OrderId " + productReservationCancelledEvent.getOrderId()
-                + " - productId " + productReservationCancelledEvent.getProductId() + " - REASON: " + productReservationCancelledEvent.getReason());
+        log.info("Se cancela la orden {} por fallo en el pago", productReservationCancelledEvent.getOrderId());
 
         RejectOrderCommand rejectOrderCommand = RejectOrderCommand.builder()
                 .orderId(productReservationCancelledEvent.getOrderId())
@@ -259,6 +282,22 @@ public class OrderSaga {
                 .build();
 
         commandGateway.send(rejectOrderCommand);
+    }
+
+    // compensation en product reservation por fallo en payment
+    @SagaEventHandler(associationProperty = "orderId")
+    public void handle(PaymentCancelledEvent paymentCancelledEvent) {
+
+        log.info("Se cancela la reserva de productos de la orden {} por fallo en el pago", paymentCancelledEvent.getOrderId());
+
+        ProductReservedEvent productReservedEvent = ProductReservedEvent.builder()
+                .orderId(paymentCancelledEvent.getOrderId())
+                .productId(productId)
+                .quantity(productQuantity)
+                .userId(userId)
+                .build();
+
+        cancelProductReservation(productReservedEvent, "No se ha podido procesar el envío");
     }
 
     @EndSaga
@@ -286,7 +325,7 @@ public class OrderSaga {
         cancelProductReservation(productReservedEvent, "Payment processing timeout");
     }
 
-    // método para hacer ROLLBACK/COMPENSATION en varios puntos de SAGA
+    // método para hacer COMPENSATION de product reservation en varios puntos de SAGA
     private void cancelProductReservation(ProductReservedEvent productReservedEvent, String reason) {
 
         // si se cancela la reserva cancelamos el Deadline

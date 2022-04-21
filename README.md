@@ -1,6 +1,6 @@
 # eStore-OrdersService
 
-Desde el microservicio que va a hacer de hilo conductor, que es el que recibe las llamadas por API:
+Desde el microservicio Order-Service que hace de hilo conductor recibe las llamadas por API:
 
  - queryController recibe DTO y crea QUERY - (QueryGateway) - @queryHandler(validaciones/filtros) va a BD y devuelve la info
  - commandController recibe DTO y crea COMMAND con @TargetAggregateIdentifier en campo necesario - (CommandGateway) 
@@ -24,3 +24,9 @@ Desde el microservicio que va a hacer de hilo conductor, que es el que recibe la
    - @ResetHandler se ejecuta antes del Event Replay (en nuestro caso vacía las read BD lookUp y normal de Products)
    - con EventProcessingConfiguration encontramos el proceso de evento que quedemos para ser replicado
    - en application.properties: axon.eventhandling.processors.product-group.mode = tracking -> después se devuelve el valor a subscribing
+
+PTE: 
+   - crear endpoint para saber qué productos están a 0 unidades (si se puede automatizarlo y mandar como notificación una vez al día)
+   - OutOfStockException devuelve código 200 en lugar de 304 (no modificado)
+   - Circuit Breaker HISTRIX por implementar
+   - Zipkin Server con Sleuth por implementar

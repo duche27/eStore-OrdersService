@@ -2,13 +2,15 @@ package com.gui.estore.ordersservice.core.events;
 
 import com.gui.estore.ordersservice.model.OrderStatus;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Value;
 
 @Value    // inmutable version of @Data - class and field private final
 @AllArgsConstructor
+@Builder
 public class OrderRejectedEvent {
 
     String orderId;
     String reason;
-    OrderStatus orderStatus = OrderStatus.REJECTED;
+    OrderStatus orderStatus;
 }
