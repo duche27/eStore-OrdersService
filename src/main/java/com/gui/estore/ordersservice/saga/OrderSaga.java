@@ -115,12 +115,12 @@ public class OrderSaga {
             userPaymentDetails = queryGateway.query(fetchUserPaymentDetailsQuery, ResponseTypes.instanceOf(User.class)).join();
         } catch (Exception e) {
             // compensation
-            cancelProductReservation(productReservedEvent,e.getMessage());
+            cancelProductReservation(productReservedEvent, e.getMessage());
             return;
         }
 
         if (Objects.isNull(userPaymentDetails)) {
-            cancelProductReservation(productReservedEvent,"Ha habido un error al recuperar los métodos de pago del usuario" + userPaymentDetails.getFirstName());
+            cancelProductReservation(productReservedEvent, "Ha habido un error al recuperar los métodos de pago del usuario" + userPaymentDetails.getFirstName());
             log.error("Ha habido un error al recuperar los métodos de pago del usuario" + userPaymentDetails.getFirstName());
             return;
         }
@@ -149,39 +149,16 @@ public class OrderSaga {
             // bloquea ejecución ese tiempo, si no llega devuelve null
             result = commandGateway.sendAndWait(processPaymentCommand, 10, TimeUnit.SECONDS);
         } catch (Exception e) {
-            cancelProductReservation(productReservedEvent,e.getMessage());
+            cancelProductReservation(productReservedEvent, e.getMessage());
             log.error(e.getMessage() + "Ha habido un error al ejecutar el pago del usuario" + userPaymentDetails.getFirstName());
             return;
         }
 
         if (Objects.isNull(result)) {
-            cancelProductReservation(productReservedEvent,"Ha habido un error al ejecutar el pago del usuario" + userPaymentDetails.getFirstName());
+            cancelProductReservation(productReservedEvent, "Ha habido un error al ejecutar el pago del usuario" + userPaymentDetails.getFirstName());
             log.error("Ha habido un error al ejecutar el pago del usuario" + userPaymentDetails.getFirstName());
             return;
         }
-
-//        log.info("Pago de orden " + processPaymentCommand.getOrderId() + " ejecutado OK");
-//
-//        // 2 mins, pero normalmente algo como un envío pueden ser varios días
-//        // paymentProcessedEvent payload opcional
-//        scheduleId = deadlineManager.schedule(Duration.of(2, ChronoUnit.MINUTES),
-//                PAYMENT_PROCESSING_TIMEOUT_DEADLINE, paymentProcessedEvent);
-//
-//        ShipOrderCommand shipOrderCommand = ShipOrderCommand.builder()
-//                .orderId(paymentProcessedEvent.getOrderId())
-//                .shipmentId(UUID.randomUUID().toString())
-//                .build();
-//
-//        try {
-//            // enviamos el COMMAND al COMMAND GATEWAY que llegará al AGGREGATE de SHIPMENT
-//            commandGateway.send(shipOrderCommand);
-//        } catch (Exception e) {
-//            log.error("Ha habido un error al enviar con el ENVÍO de la orden");
-//            ProductReservedEvent productReservedEvent = ProductReservedEvent.builder()
-//                    .orderId(productReservedEvent.getOrderId())
-//                    .build();
-//            cancelProductReservation(productReservedEvent,e.getMessage());
-//        }
     }
 
     @SagaEventHandler(associationProperty = "orderId")
@@ -200,6 +177,7 @@ public class OrderSaga {
                 .build();
 
         try {
+
             // enviamos el COMMAND al COMMAND GATEWAY que llegará al AGGREGATE de SHIPMENT
             commandGateway.send(shipOrderCommand);
         } catch (Exception e) {
@@ -219,6 +197,8 @@ public class OrderSaga {
         // processed user payment
         log.info("Envío completado correctamente! Orden " + orderShippedEvent.getOrderId());
 
+        // mandamos al servicio de notificaciones
+
         // creamos nuevo orderAcceptCommand
         ApproveOrderCommand approveOrderCommand = new ApproveOrderCommand(orderShippedEvent.getOrderId());
 
@@ -230,8 +210,6 @@ public class OrderSaga {
     public void handle(OrderApprovedEvent orderApprovedEvent) {
 
         log.info("OrderApprovedEvent completely handled in SAGA! OrderId: " + orderApprovedEvent.getOrderId());
-
-        // mandar COMMAND a NotificationService para que mande un email
 
         // happy path cuando tenemos OrderApprovedEvent
         // comunica con SUBSCRIPTION QUERY posibles cambios, errores o ya no hay updates
@@ -250,7 +228,7 @@ public class OrderSaga {
     public void handle(ProductReservationCancelledEvent productReservationCancelledEvent) {
 
         log.info("PRODUCT RESERVATION EVENT handled in SAGA: OrderId " + productReservationCancelledEvent.getOrderId()
-        + " - productId " + productReservationCancelledEvent.getProductId() + " - REASON: " + productReservationCancelledEvent.getReason());
+                + " - productId " + productReservationCancelledEvent.getProductId() + " - REASON: " + productReservationCancelledEvent.getReason());
 
         RejectOrderCommand rejectOrderCommand = RejectOrderCommand.builder()
                 .orderId(productReservationCancelledEvent.getOrderId())

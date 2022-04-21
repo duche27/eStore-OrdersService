@@ -1,5 +1,6 @@
 package com.gui.estore.ordersservice.exceptions;
 
+import io.axoniq.axonserver.grpc.ErrorMessage;
 import org.axonframework.commandhandling.CommandExecutionException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
@@ -44,7 +45,7 @@ public class OrderErrorHandler {
             String errorMessage = error.getDefaultMessage();
             errors.put(fieldName, errorMessage);
         });
-        return new ResponseEntity<>(Error.builder().message(errors.toString()).build(), HttpStatus.BAD_REQUEST);
+        return new ResponseEntity<>(new Error(errors.toString()), HttpStatus.BAD_REQUEST);
     }
 
     // excepciones del AGGREGATE
