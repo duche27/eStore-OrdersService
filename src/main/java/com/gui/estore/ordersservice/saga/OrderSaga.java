@@ -1,13 +1,7 @@
 package com.gui.estore.ordersservice.saga;
 
-import com.gui.estore.core.commands.CancelProductReservationCommand;
-import com.gui.estore.core.commands.ProcessPaymentCommand;
-import com.gui.estore.core.commands.ReserveProductCommand;
-import com.gui.estore.core.commands.ShipOrderCommand;
-import com.gui.estore.core.events.OrderShippedEvent;
-import com.gui.estore.core.events.PaymentProcessedEvent;
-import com.gui.estore.core.events.ProductReservationCancelledEvent;
-import com.gui.estore.core.events.ProductReservedEvent;
+import com.gui.estore.core.commands.*;
+import com.gui.estore.core.events.*;
 import com.gui.estore.core.model.User;
 import com.gui.estore.core.queries.FetchUserPaymentDetailsQuery;
 import com.gui.estore.ordersservice.commands.ApproveOrderCommand;
@@ -57,8 +51,11 @@ public class OrderSaga {
     private transient QueryUpdateEmitter queryUpdateEmitter;
 
     private final String PAYMENT_PROCESSING_TIMEOUT_DEADLINE = "payment-processing-deadline";
+    private final String SHIPMENT_PROCESSING_TIMEOUT_DEADLINE = "shipment-processing-deadline";
 
-    private String scheduleId;
+    private String paymentScheduleId;
+    private String shipmentScheduleId;
+    private String userEmail;
 
     // abrimos método HANDLE pro cada EVENT recibido
     // en cuanto un OrderCreatedEvent sea creado
@@ -125,12 +122,14 @@ public class OrderSaga {
             return;
         }
 
+        userEmail = userPaymentDetails.getEmail();
+
         // userPaymentDetails OK -> mandamos a PaymentService AGGREGATE
         log.info("Información del pago del usuario " + userPaymentDetails.getFirstName() + " recuperada OK");
 
         // 2 mins, pero normalmente algo como una confirmación de usuario pueden ser varios días
         // productReservedEvent payload opcional
-        scheduleId = deadlineManager.schedule(Duration.of(2, ChronoUnit.MINUTES),
+        paymentScheduleId = deadlineManager.schedule(Duration.of(2, ChronoUnit.MINUTES),
                 PAYMENT_PROCESSING_TIMEOUT_DEADLINE, productReservedEvent);
 
         // para pruebas: ejecutaba siempre deadlineManager
@@ -168,8 +167,8 @@ public class OrderSaga {
 
         // 2 mins, pero normalmente algo como un envío pueden ser varios días
         // paymentProcessedEvent payload opcional
-        scheduleId = deadlineManager.schedule(Duration.of(2, ChronoUnit.MINUTES),
-                PAYMENT_PROCESSING_TIMEOUT_DEADLINE, paymentProcessedEvent);
+        shipmentScheduleId = deadlineManager.schedule(Duration.of(2, ChronoUnit.MINUTES),
+                SHIPMENT_PROCESSING_TIMEOUT_DEADLINE, paymentProcessedEvent);
 
         ShipOrderCommand shipOrderCommand = ShipOrderCommand.builder()
                 .orderId(paymentProcessedEvent.getOrderId())
@@ -191,16 +190,40 @@ public class OrderSaga {
     @SagaEventHandler(associationProperty = "orderId")
     public void handle(OrderShippedEvent orderShippedEvent) {
 
+        // processed user shipment
+        log.info("Envío completado correctamente! Orden " + orderShippedEvent.getOrderId());
+
+        SendNotificationCommand sendNotificationCommand = SendNotificationCommand.builder()
+                .orderId(orderShippedEvent.getOrderId())
+                .noticeId(UUID.randomUUID().toString())
+                .email(userEmail)
+                .build();
+
+        try {
+
+            // enviamos el COMMAND al COMMAND GATEWAY que llegará al AGGREGATE de NOTIFICATION
+            commandGateway.send(sendNotificationCommand);
+        } catch (Exception e) {
+            // compensation transaction
+            log.error("Ha habido un error al enviar la notificación vía email");
+//            ProductReservedEvent productReservedEvent = ProductReservedEvent.builder().orderId(productReservedEvent.getOrderId()).build();
+//            cancelProductReservation(productReservedEvent, e.getMessage());
+        }
+    }
+
+    @SagaEventHandler(associationProperty = "orderId")
+    public void handle(NotificationSentEvent notificationSentEvent) {
+
         // si se ha procesado el pago y el envío ha sido correcto cancelamos el Deadline
         cancelDeadline();
 
-        // processed user payment
-        log.info("Envío completado correctamente! Orden " + orderShippedEvent.getOrderId());
+        // processed user notification
+        log.info("El cliente ha sido notificado correctamente! Orden " + notificationSentEvent.getOrderId());
 
         // mandamos al servicio de notificaciones
 
         // creamos nuevo orderAcceptCommand
-        ApproveOrderCommand approveOrderCommand = new ApproveOrderCommand(orderShippedEvent.getOrderId());
+        ApproveOrderCommand approveOrderCommand = new ApproveOrderCommand(notificationSentEvent.getOrderId());
 
         commandGateway.send(approveOrderCommand);
     }
@@ -217,7 +240,7 @@ public class OrderSaga {
         queryUpdateEmitter.emit(
                 FindOrderQuery.class,
                 query -> true,
-                new OrderSummary(orderApprovedEvent.getOrderId(), orderApprovedEvent.getOrderStatus(), ""));
+                new OrderSummary(orderApprovedEvent.getOrderId(), orderApprovedEvent.getOrderStatus(), "ORDER APPROVED"));
 
         // método alternativo para indicar el fin de saga aparte de la anotación @EndSaga
 //        SagaLifecycle.end();
@@ -284,9 +307,15 @@ public class OrderSaga {
     private void cancelDeadline() {
 
         // si se ha procesado el pago, se cancela el DeadLineManager porque el proceso ha ido ok
-        if (scheduleId != null) {
-            deadlineManager.cancelSchedule(PAYMENT_PROCESSING_TIMEOUT_DEADLINE, scheduleId);
-            scheduleId = null;
+        if (paymentScheduleId != null) {
+            deadlineManager.cancelSchedule(PAYMENT_PROCESSING_TIMEOUT_DEADLINE, paymentScheduleId);
+            paymentScheduleId = null;
+        }
+
+        // si se ha procesado el envío, se cancela el DeadLineManager porque el proceso ha ido ok
+        if (shipmentScheduleId != null) {
+            deadlineManager.cancelSchedule(SHIPMENT_PROCESSING_TIMEOUT_DEADLINE, shipmentScheduleId);
+            shipmentScheduleId = null;
         }
     }
 }
